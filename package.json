@@ -41,7 +41,8 @@
     "update-module-id": "ts-node ./src/tools/updateModuleID.ts",
     "wa-source:clean": "shx rm -rf wa-source",
     "wa-source:format": "prettier --write ./wa-source",
-    "watch": "webpack watch --devtool inline-source-map --mode development"
+    "watch": "webpack watch --devtool inline-source-map --mode development",
+    "sync:fork": "ts-node ./src/tools/syncFork.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",
