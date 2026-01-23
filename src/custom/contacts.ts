@@ -31,11 +31,11 @@ export async function checkNumber(contactId: string) {
   const result = await contact.queryExists(contactId);
 
   if (result) {
-    const wid = result.wid._serialized || result.wid || null;
+    let wid = result.wid._serialized || result.wid || null;
     const lid = result.lid?._serialized || result.lid || null;
     const name = (result as any).name || null;
-    const phone = result.wid.user || null;
-    const phoneBR =
+    let phone = result.wid.user || null;
+    let phoneBR =
       phone && phone.length === 12 && phone.startsWith('55')
         ? phone.slice(0, 4) + '9' + phone.slice(4)
         : phone;
@@ -46,6 +46,16 @@ export async function checkNumber(contactId: string) {
       extraInfo = await contact.getPnLidEntry(wid);
     } else if (lid) {
       extraInfo = await contact.getPnLidEntry(lid);
+    }
+
+    // If we didn't have a WID but PnLidEntry found one (e.g. via LID lookup), use it
+    if (!wid && extraInfo.phoneNumber) {
+      wid = extraInfo.phoneNumber._serialized;
+      phone = extraInfo.phoneNumber.id;
+      phoneBR =
+        phone && phone.length === 12 && phone.startsWith('55')
+          ? phone.slice(0, 4) + '9' + phone.slice(4)
+          : phone;
     }
 
     return {
