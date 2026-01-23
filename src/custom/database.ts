@@ -206,27 +206,64 @@ export async function saveContact(data: {
         contactId = row.id || row[0];
       }
     } else {
-      // Insert
+      // 1. Check if we already have this LID associated with this User
+      if (info.lid) {
+        try {
+          const rsExist = await client.execute({
+            sql: `SELECT contact_id FROM contacts_users WHERE user_id = ? AND lid = ?`,
+            args: [userId, info.lid],
+          });
+          if (rsExist.rows.length > 0) {
+            const row = rsExist.rows[0];
+            // @ts-expect-error row is object or array
+            contactId = row.contact_id || row[0];
 
-      const _rs = await client.execute({
-        // Removed lid from contacts table
-        sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        args: [
-          info.wid,
-          // info.lid removed
-          info.name,
-          info.phone,
-          info.phoneBR,
-          there_is,
-          linkStr,
-        ],
-      });
-      const rsId = await client.execute('SELECT last_insert_rowid() as id');
-      if (rsId.rows.length > 0) {
-        const row = rsId.rows[0];
-        // @ts-expect-error row is object or array
-        contactId = row.id || row[0];
+            console.log(
+              `WPP Custom: Found existing contact_id ${contactId} for LID ${info.lid}`
+            );
+
+            // Update the existing contact record (even if it has NULL wid) to keep name/phone fresh
+            await client.execute({
+              sql: `UPDATE contacts SET 
+                          name = ?, phone = ?, phoneBR = ?, there_is = ?, link = ?, updated_at = CURRENT_TIMESTAMP
+                          WHERE id = ?`,
+              args: [
+                info.name,
+                info.phone,
+                info.phoneBR,
+                there_is,
+                linkStr,
+                contactId,
+              ],
+            });
+          }
+        } catch (err) {
+          console.error('WPP Custom: Error checking existing LID:', err);
+        }
+      }
+
+      // 2. If not found, insert new
+      if (!contactId) {
+        const _rs = await client.execute({
+          // Removed lid from contacts table
+          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
+                      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          args: [
+            info.wid,
+            // info.lid removed
+            info.name,
+            info.phone,
+            info.phoneBR,
+            there_is,
+            linkStr,
+          ],
+        });
+        const rsId = await client.execute('SELECT last_insert_rowid() as id');
+        if (rsId.rows.length > 0) {
+          const row = rsId.rows[0];
+          // @ts-expect-error row is object or array
+          contactId = row.id || row[0];
+        }
       }
     }
 

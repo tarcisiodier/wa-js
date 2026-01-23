@@ -58,6 +58,18 @@ export async function checkNumber(contactId: string) {
           : phone;
     }
 
+    // Fallback: If we have LID but no WID/Phone, use the input contactId
+    if (!wid && lid && !phone) {
+      // User provided contactId might be formatted. Sanitize or use raw?
+      // contactId usually comes as 555199...@c.us or numbers.
+      const number = contactId.replace(/@.*/, '');
+      phone = number;
+      phoneBR =
+        phone && phone.length === 12 && phone.startsWith('55')
+          ? phone.slice(0, 4) + '9' + phone.slice(4)
+          : phone;
+    }
+
     return {
       there_is: true,
       data: {
