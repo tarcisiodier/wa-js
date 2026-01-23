@@ -79,7 +79,7 @@ export async function checkNumber(contactId: string) {
         phone,
         phoneBR,
         there_is: true,
-        link: [wid, phone, lid, phoneBR].filter((item) => item !== null),
+        link: [wid, phone, phoneBR].filter((item) => item !== null),
         contact: extraInfo.contact,
       },
     };
