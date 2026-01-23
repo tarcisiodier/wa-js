@@ -40,7 +40,13 @@ export async function checkNumber(contactId: string) {
         ? phone.slice(0, 4) + '9' + phone.slice(4)
         : phone;
 
-    const extraInfo = await contact.getPnLidEntry(contactId);
+    // Use the canonical WID or LID found by queryExists
+    let extraInfo: any = { contact: undefined };
+    if (wid) {
+      extraInfo = await contact.getPnLidEntry(wid);
+    } else if (lid) {
+      extraInfo = await contact.getPnLidEntry(lid);
+    }
 
     return {
       there_is: true,
