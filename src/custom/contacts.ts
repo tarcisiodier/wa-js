@@ -52,7 +52,7 @@ export async function checkNumber(contactId: string) {
         phoneBR,
         there_is: true,
         link: [wid, phone, lid, phoneBR].filter((item) => item !== null),
-        contact: extraInfo,
+        contact: extraInfo.contact,
       },
     };
   } else {
