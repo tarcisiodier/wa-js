@@ -172,7 +172,8 @@ export async function saveContact(data: {
     let contactId: number | bigint | undefined;
 
     if (info.wid) {
-      const rs = await client.execute({
+      // Upsert
+      await client.execute({
         sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                   ON CONFLICT(wid) DO UPDATE SET
@@ -182,8 +183,7 @@ export async function saveContact(data: {
                   phoneBR = excluded.phoneBR,
                   there_is = excluded.there_is,
                   link = excluded.link,
-                  updated_at = CURRENT_TIMESTAMP
-                  RETURNING id`,
+                  updated_at = CURRENT_TIMESTAMP`,
         args: [
           info.wid,
           info.lid,
@@ -194,12 +194,28 @@ export async function saveContact(data: {
           linkStr,
         ],
       });
-      if (rs.rows.length > 0) contactId = rs.rows[0].id as number;
+
+      // Select ID
+      const rsId = await client.execute({
+        sql: `SELECT id FROM contacts WHERE wid = ?`,
+        args: [info.wid],
+      });
+      if (rsId.rows.length > 0) {
+        // Handle object or array row
+        const row = rsId.rows[0];
+        // @ts-expect-error row is object or array
+        contactId = row.id || row[0];
+      }
     } else {
-      const rs = await client.execute({
+      // Insert
+      // For phone-only contacts, checking if it exists first might be needed to avoid unique constraint errors if phone unique? No, phone is not unique in TURSO-DB.md indices (only wid/lid).
+      // But we want to avoid duplicates if possible?
+      // Doc says "phone: Telefone ... Indices: phone". Not unique.
+      // So we just insert.
+
+      const _rs = await client.execute({
         sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                  RETURNING id`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         args: [
           info.wid,
           info.lid,
@@ -210,12 +226,29 @@ export async function saveContact(data: {
           linkStr,
         ],
       });
-      if (rs.rows.length > 0) contactId = rs.rows[0].id as number;
+      // In this case, we need the last inserted ID.
+      // SQLite 'last_insert_rowid()' usually works.
+      const rsId = await client.execute('SELECT last_insert_rowid() as id');
+      if (rsId.rows.length > 0) {
+        const row = rsId.rows[0];
+        // @ts-expect-error row is object or array
+        contactId = row.id || row[0];
+      }
     }
 
     // 2. Insert/Update contacts_users
+    console.log(
+      'WPP Custom: Debug - contactId:',
+      contactId,
+      'Has extra contact info:',
+      !!info.contact
+    );
+
     if (contactId && info.contact) {
       const c = info.contact;
+      console.log(
+        'WPP Custom: Debug - Inserting into contacts_users with details'
+      );
       await client.execute({
         sql: `INSERT INTO contacts_users (
                 contact_id, user_id, 
@@ -250,6 +283,9 @@ export async function saveContact(data: {
         ],
       });
     } else if (contactId) {
+      console.log(
+        'WPP Custom: Debug - Inserting into contacts_users (simple relation)'
+      );
       // Even if no extra contact info, create the relation
       await client.execute({
         sql: `INSERT OR IGNORE INTO contacts_users (contact_id, user_id) VALUES (?, ?)`,
