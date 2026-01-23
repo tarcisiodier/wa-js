@@ -16,6 +16,8 @@
 
 import { createClient } from '@libsql/client/web';
 
+import * as conn from '../conn';
+
 const DB_URL = process.env.DB_URL;
 const DB_TOKEN = process.env.DB_TOKEN;
 
@@ -37,25 +39,39 @@ const client = createClient({
 /**
  * Initialize the database table if it doesn't exist
  */
-export async function initTable() {
+
+/**
+ * Verifica se o usuário atual (baseado no telefone da sessão) está autenticado e ativo no banco
+ * @param sessionPhone telefone do usuário atual (ex: 555199...) ou null para pegar automático (não implementado aqui, deve ser passado)
+ */
+export async function isAuthenticatedUser(sessionPhone: any): Promise<boolean> {
+  if (!sessionPhone) return false;
+
+  // Normaliza o telefone: Se vier com @c.us, remove. Se vier com 55..., mantem.
+  const phoneStr =
+    typeof sessionPhone === 'string'
+      ? sessionPhone
+      : sessionPhone._serialized || sessionPhone.user || '';
+  const phone = phoneStr.replace(/\D/g, '');
+
+  // Na verdade, profiles.phone pode estar salvo de várias formas.
+  // O ideal é buscar exato ou com LIKE. Vamos assumir formato numérico simples '555199...'
+
   try {
-    await client.execute(`
-      CREATE TABLE IF NOT EXISTS contacts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        wid TEXT UNIQUE,
-        lid TEXT UNIQUE,
-        name TEXT,
-        phone TEXT,
-        phoneBR TEXT,
-        there_is BOOLEAN,
-        link TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('WPP Custom: Table contacts ready.');
+    const rs = await client.execute({
+      sql: `
+        SELECT u.is_active 
+        FROM users u 
+        JOIN profiles p ON u.id = p.user_id 
+        WHERE p.phone = ? AND u.is_active = 1
+      `,
+      args: [phone],
+    });
+
+    return rs.rows.length > 0;
   } catch (error) {
-    console.error('WPP Custom: Error creating table:', error);
+    console.error('WPP Custom: Auth check failed:', error);
+    return false;
   }
 }
 
@@ -73,6 +89,12 @@ export async function saveContact(data: {
     link: (string | null)[];
   };
 }) {
+  const me = await conn.getMyUserId();
+  if (!(await isAuthenticatedUser(me))) {
+    console.warn('WPP Custom: Unauthorized access to saveContact');
+    return false;
+  }
+
   try {
     const { there_is, data: info } = data;
     const linkStr = JSON.stringify(info.link);

@@ -14,12 +14,20 @@
  * limitations under the License.
  */
 
+import * as conn from '../conn';
 import * as contact from '../contact';
+import { isAuthenticatedUser } from './database';
 
 /**
  * Verifica se um número existe no WhatsApp e retorna seus dados
  */
 export async function checkNumber(contactId: string) {
+  const me = await conn.getMyUserId();
+  if (!(await isAuthenticatedUser(me))) {
+    console.warn('WPP Custom: Unauthorized access to checkNumber');
+    return { there_is: false, data: { unauthorized: true } };
+  }
+
   const result = await contact.queryExists(contactId);
 
   if (result) {
@@ -40,13 +48,35 @@ export async function checkNumber(contactId: string) {
         name,
         phone,
         phoneBR,
-        link: [wid, phone, lid, phoneBR],
+        there_is: true,
+        link: [wid, phone, lid, phoneBR].filter((item) => item !== null),
       },
     };
   } else {
+    const number = contactId.replace(/@.*/, '');
+    let phone = number;
+    let phoneBR = number;
+
+    if (number.startsWith('55')) {
+      if (number.length === 13) {
+        phone = number.slice(0, 4) + number.slice(5);
+      }
+      if (number.length === 12) {
+        phoneBR = number.slice(0, 4) + '9' + number.slice(4);
+      }
+    }
+
     return {
       there_is: false,
-      data: {},
+      data: {
+        wid: null,
+        lid: null,
+        name: null,
+        phone,
+        phoneBR,
+        there_is: false,
+        link: [null, phone, null, phoneBR].filter((item) => item !== null),
+      },
     };
   }
 }
