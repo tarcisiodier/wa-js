@@ -16,7 +16,7 @@
 
 import * as conn from '../conn';
 import * as contact from '../contact';
-import { isAuthenticatedUser } from './database';
+import { getContactByLink, isAuthenticatedUser } from './database';
 
 /**
  * Verifica se um número existe no WhatsApp e retorna seus dados
@@ -26,6 +26,12 @@ export async function checkNumber(contactId: string) {
   if (!(await isAuthenticatedUser(me))) {
     console.warn('WPP Custom: Unauthorized access to checkNumber');
     return { there_is: false, data: { unauthorized: true } };
+  }
+
+  // 1. Check Cache first
+  const cached = await getContactByLink(contactId);
+  if (cached) {
+    return cached;
   }
 
   const result = await contact.queryExists(contactId);

@@ -335,3 +335,75 @@ export async function saveContact(data: {
     return false;
   }
 }
+
+/**
+ * Check if contact exists in database by link
+ */
+export async function getContactByLink(contactId: string) {
+  const me = await conn.getMyUserId();
+  const userId = await getDbUser(me);
+
+  if (!userId) return null;
+
+  try {
+    // Sanitize contactId for LIKE query
+    const search = `%"${contactId}"%`;
+
+    const rs = await client.execute({
+      sql: `
+        SELECT c.*, 
+               cu.lid, cu.name as custom_name, cu.short_name, cu.pushname, 
+               cu.verified_name, cu.is_business, cu.is_enterprise,
+               cu.is_contact_sync_completed, cu.sync_to_addressbook
+        FROM contacts c
+        LEFT JOIN contacts_users cu ON c.id = cu.contact_id AND cu.user_id = ?
+        WHERE c.link LIKE ?
+        LIMIT 1
+      `,
+      args: [userId, search],
+    });
+
+    if (rs.rows.length > 0) {
+      const row = rs.rows[0];
+      const linkStr = (row.link as string) || '[]';
+      let link: string[] = [];
+      try {
+        link = JSON.parse(linkStr);
+      } catch (_e) {
+        link = [];
+      }
+
+      console.log(`WPP Custom: Found contact in cache: ${contactId}`);
+
+      return {
+        there_is: true,
+        data: {
+          wid: (row.wid as string) || null,
+          lid: (row.lid as string) || null,
+          name: (row.custom_name as string) || (row.name as string) || null,
+          phone: (row.phone as string) || null,
+          phoneBR: (row.phoneBR as string) || null,
+          there_is: true,
+          link: link,
+          contact: {
+            name:
+              (row.custom_name as string) || (row.name as string) || undefined,
+            shortName: (row.short_name as string) || undefined,
+            pushname: (row.pushname as string) || undefined,
+            verifiedName: (row.verified_name as string) || undefined,
+            isBusiness: !!row.is_business,
+            isEnterprise: !!row.is_enterprise,
+            isContactSyncCompleted:
+              (row.is_contact_sync_completed as number) || undefined,
+            syncToAddressbook: !!row.sync_to_addressbook,
+          },
+        },
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('WPP Custom: Error getting contact by link:', error);
+    return null;
+  }
+}
