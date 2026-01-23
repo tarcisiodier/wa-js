@@ -407,3 +407,118 @@ export async function getContactByLink(contactId: string) {
     return null;
   }
 }
+
+/**
+ * Save contact message (last message)
+ */
+export async function saveContactMessage(
+  contactIdStr: string,
+  messageData: {
+    message_id: string;
+    chat_id: string;
+    body: string;
+    type: string;
+    timestamp_ms: number;
+    ack: number;
+    is_forwarded: boolean;
+    unread_count: number;
+    has_unread: boolean;
+    exists_flag: boolean;
+  }
+) {
+  const me = await conn.getMyUserId();
+  const userId = await getDbUser(me);
+
+  if (!userId) return false;
+
+  try {
+    // 1. Get Contact ID
+    const rsC = await client.execute({
+      sql: `SELECT id FROM contacts WHERE wid = ? LIMIT 1`,
+      args: [contactIdStr],
+    });
+
+    let contactId: any = null;
+    if (rsC.rows.length > 0) {
+      contactId = rsC.rows[0].id;
+    } else {
+      console.warn(
+        `WPP Custom: Contact not found for message save: ${contactIdStr}`
+      );
+      return false;
+    }
+
+    // 2. Upsert Message
+    await client.execute({
+      sql: `INSERT INTO contact_messages (
+              contact_id, user_id, message_id, chat_id, body, type,
+              timestamp_ms, ack, is_forwarded, unread_count, has_unread, exists_flag,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(contact_id, user_id) DO UPDATE SET
+              message_id = excluded.message_id,
+              chat_id = excluded.chat_id,
+              body = excluded.body,
+              type = excluded.type,
+              timestamp_ms = excluded.timestamp_ms,
+              ack = excluded.ack,
+              is_forwarded = excluded.is_forwarded,
+              unread_count = excluded.unread_count,
+              has_unread = excluded.has_unread,
+              exists_flag = excluded.exists_flag,
+              updated_at = CURRENT_TIMESTAMP`,
+      args: [
+        contactId,
+        userId,
+        messageData.message_id,
+        messageData.chat_id,
+        messageData.body,
+        messageData.type,
+        messageData.timestamp_ms,
+        messageData.ack,
+        messageData.is_forwarded ? 1 : 0,
+        messageData.unread_count,
+        messageData.has_unread ? 1 : 0,
+        messageData.exists_flag ? 1 : 0,
+      ],
+    });
+
+    return true;
+  } catch (error) {
+    console.error('WPP Custom: Error saving contact message:', error);
+    return false;
+  }
+}
+
+/**
+ * Save full contact structure from getAllContacts
+ */
+export async function saveFullContact(contactData: any) {
+  try {
+    // 1. Save Contact & User Relation
+    const contactInfo = {
+      ...contactData.contact,
+      contact: contactData.contact_user, // contact_user goes into 'contact' property
+    };
+
+    const saved = await saveContact({
+      there_is: contactData.contact.there_is,
+      data: contactInfo,
+    });
+
+    if (!saved) return false;
+
+    // 2. Save Last Message if exists
+    if (contactData.lastMessage) {
+      const wid = contactData.contact.wid;
+      if (wid) {
+        await saveContactMessage(wid, contactData.lastMessage);
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('WPP Custom: Error saving full contact:', error);
+    return false;
+  }
+}
