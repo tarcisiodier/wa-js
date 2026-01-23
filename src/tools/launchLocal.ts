@@ -23,6 +23,7 @@ async function start() {
     headless: false,
     devtools: true,
     viewport: null,
+    bypassCSP: true,
     args,
   });
 
