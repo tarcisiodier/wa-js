@@ -58,14 +58,25 @@ export async function isAuthenticatedUser(sessionPhone: any): Promise<boolean> {
   // O ideal é buscar exato ou com LIKE. Vamos assumir formato numérico simples '555199...'
 
   try {
+    // Check if phone matches profiles.phone OR exists in profiles.wa_phones array
+    // Note: SQLite JSON logic might depend on Turso extension support, but simple LIKE works for standard JSON text search
+    // to check existence in array.
+
+    // We search for the phone inside the JSON array string using LIKE.
+    // Format is like ["555...", "555..."], so we can search for "%"phone"%"
+
     const rs = await client.execute({
       sql: `
         SELECT u.is_active 
         FROM users u 
         JOIN profiles p ON u.id = p.user_id 
-        WHERE p.phone = ? AND u.is_active = 1
+        WHERE u.is_active = 1
+        AND (
+            p.phone = ? 
+            OR p.wa_phones LIKE ?
+        )
       `,
-      args: [phone],
+      args: [phone, `%"${phone}"%`],
     });
 
     return rs.rows.length > 0;
