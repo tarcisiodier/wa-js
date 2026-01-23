@@ -262,7 +262,7 @@ export async function saveContact(data: {
                 is_business, is_enterprise, verified_name,
                 is_contact_sync_completed, sync_to_addressbook,
                 assigned_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
               ON CONFLICT(contact_id, user_id) DO UPDATE SET
                 lid = excluded.lid,
                 name = excluded.name,
