@@ -239,6 +239,27 @@ export async function saveContact(data: {
     // 2. Insert/Update contacts_users
     if (contactId && info.contact) {
       const c = info.contact;
+
+      const args = [
+        contactId,
+        userId,
+        c.name || null,
+        c.shortName || null,
+        c.pushname || null,
+        c.type || null,
+        c.isBusiness || null,
+        c.isEnterprise || null,
+        c.verifiedName || null,
+        c.isContactSyncCompleted || null,
+        c.syncToAddressbook || null,
+      ];
+
+      console.log(
+        'WPP Custom: Debug - Saving to contacts_users. Contact object:',
+        JSON.stringify(c)
+      );
+      console.log('WPP Custom: Debug - SQL Args:', JSON.stringify(args));
+
       await client.execute({
         sql: `INSERT INTO contacts_users (
                 contact_id, user_id, 
@@ -258,19 +279,7 @@ export async function saveContact(data: {
                 is_contact_sync_completed = excluded.is_contact_sync_completed,
                 sync_to_addressbook = excluded.sync_to_addressbook,
                 assigned_at = CURRENT_TIMESTAMP`,
-        args: [
-          contactId,
-          userId,
-          c.name || null,
-          c.shortName || null,
-          c.pushname || null,
-          c.type || null,
-          c.isBusiness || null,
-          c.isEnterprise || null,
-          c.verifiedName || null,
-          c.isContactSyncCompleted || null,
-          c.syncToAddressbook || null,
-        ],
+        args: args,
       });
     } else if (contactId) {
       // Even if no extra contact info, create the relation
