@@ -237,18 +237,8 @@ export async function saveContact(data: {
     }
 
     // 2. Insert/Update contacts_users
-    console.log(
-      'WPP Custom: Debug - contactId:',
-      contactId,
-      'Has extra contact info:',
-      !!info.contact
-    );
-
     if (contactId && info.contact) {
       const c = info.contact;
-      console.log(
-        'WPP Custom: Debug - Inserting into contacts_users with details'
-      );
       await client.execute({
         sql: `INSERT INTO contacts_users (
                 contact_id, user_id, 
@@ -283,9 +273,6 @@ export async function saveContact(data: {
         ],
       });
     } else if (contactId) {
-      console.log(
-        'WPP Custom: Debug - Inserting into contacts_users (simple relation)'
-      );
       // Even if no extra contact info, create the relation
       await client.execute({
         sql: `INSERT OR IGNORE INTO contacts_users (contact_id, user_id) VALUES (?, ?)`,
