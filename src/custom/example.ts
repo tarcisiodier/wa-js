@@ -17,7 +17,7 @@ import * as conn from '../conn';
 
 export function hello() {
   console.log('Hello from custom feature!');
-  return 'Hello World';
+  return 'Hello World 2';
 }
 
 /**

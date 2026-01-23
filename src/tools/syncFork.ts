@@ -23,7 +23,7 @@ const UPSTREAM_REMOTE = 'upstream';
 const MAIN_BRANCH = 'main';
 const FEATURES_BRANCH = 'features';
 const INDEX_FILE_PATH = path.resolve(__dirname, '../index.ts');
-const CUSTOM_EXPORT_LINE = "export * as acelera from './custom';";
+const CUSTOM_EXPORT_LINE = "export * as custom from './custom';";
 
 shell.config.verbose = true;
 

@@ -44,7 +44,7 @@ export * as util from './util';
 export * as newsletter from './newsletter';
 export * as whatsapp from './whatsapp';
 export * as order from './order';
-export * as acelera from './custom';
+export * as custom from './custom';
 
 export {
   emit,
