@@ -522,3 +522,146 @@ export async function saveFullContact(contactData: any) {
     return false;
   }
 }
+
+/**
+ * Save multiple contacts using batch execution
+ */
+export async function saveContactsBatch(contacts: any[]) {
+  const me = await conn.getMyUserId();
+  const userId = await getDbUser(me);
+
+  if (!userId) {
+    console.warn(
+      'WPP Custom: Unauthorized access to saveContactsBatch (User not found)'
+    );
+    return { success: false, saved: 0, failed: contacts.length };
+  }
+
+  // Batch size limit (LibSQL/Turso might have limits on statements or size)
+  // Safe bet: 20 contacts per batch (~60 statements)
+  const BATCH_SIZE = 20;
+  let savedCount = 0;
+  let failedCount = 0;
+
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const chunk = contacts.slice(i, i + BATCH_SIZE);
+    const statements: any[] = [];
+
+    for (const contactData of chunk) {
+      const info = contactData.contact;
+      // Normalizing data as in saveContact logic
+      const linkStr = JSON.stringify(info.link || []);
+      const there_is = info.there_is;
+      const wid = info.wid;
+      const lid = contactData.contact_user?.lid || info.lid; // Priority to contact_user lid if available
+
+      if (!wid && !lid) continue; // Skip if absolutely no identifier
+
+      if (wid) {
+        statements.push({
+          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(wid) DO UPDATE SET
+                    name = excluded.name,
+                    phone = excluded.phone,
+                    phoneBR = excluded.phoneBR,
+                    there_is = excluded.there_is,
+                    link = excluded.link,
+                    updated_at = CURRENT_TIMESTAMP`,
+          args: [wid, info.name, info.phone, info.phoneBR, there_is, linkStr],
+        });
+
+        // 2. Upsert Contacts_Users using Subquery for contact_id
+        if (contactData.contact_user) {
+          const c = contactData.contact_user;
+          statements.push({
+            sql: `INSERT INTO contacts_users (
+                    contact_id, user_id, lid,
+                    name, short_name, pushname, type, 
+                    is_business, is_enterprise, verified_name,
+                    is_contact_sync_completed, sync_to_addressbook,
+                    assigned_at
+                  ) VALUES ((SELECT id FROM contacts WHERE wid = ? LIMIT 1), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  ON CONFLICT(contact_id, user_id) DO UPDATE SET
+                    lid = excluded.lid,
+                    name = excluded.name,
+                    short_name = excluded.short_name,
+                    pushname = excluded.pushname,
+                    type = excluded.type,
+                    is_business = excluded.is_business,
+                    is_enterprise = excluded.is_enterprise,
+                    verified_name = excluded.verified_name,
+                    is_contact_sync_completed = excluded.is_contact_sync_completed,
+                    sync_to_addressbook = excluded.sync_to_addressbook,
+                    assigned_at = CURRENT_TIMESTAMP`,
+            args: [
+              wid, // for subquery
+              userId,
+              lid || null,
+              c.name || null,
+              c.shortName || null,
+              c.pushname || null,
+              c.type || null,
+              c.isBusiness || null,
+              c.isEnterprise || null,
+              c.verifiedName || null,
+              c.isContactSyncCompleted || null,
+              c.syncToAddressbook || null,
+            ],
+          });
+        }
+
+        // 3. Upsert Message using Subquery for contact_id
+        if (contactData.lastMessage) {
+          const m = contactData.lastMessage;
+          statements.push({
+            sql: `INSERT INTO contact_messages (
+                    contact_id, user_id, message_id, chat_id, body, type,
+                    timestamp_ms, ack, is_forwarded, unread_count, has_unread, exists_flag,
+                    updated_at
+                  ) VALUES ((SELECT id FROM contacts WHERE wid = ? LIMIT 1), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  ON CONFLICT(contact_id, user_id) DO UPDATE SET
+                    message_id = excluded.message_id,
+                    chat_id = excluded.chat_id,
+                    body = excluded.body,
+                    type = excluded.type,
+                    timestamp_ms = excluded.timestamp_ms,
+                    ack = excluded.ack,
+                    is_forwarded = excluded.is_forwarded,
+                    unread_count = excluded.unread_count,
+                    has_unread = excluded.has_unread,
+                    exists_flag = excluded.exists_flag,
+                    updated_at = CURRENT_TIMESTAMP`,
+            args: [
+              wid, // for subquery
+              userId,
+              m.message_id,
+              m.chat_id,
+              m.body,
+              m.type,
+              m.timestamp_ms,
+              m.ack,
+              m.is_forwarded ? 1 : 0,
+              m.unread_count,
+              m.has_unread ? 1 : 0,
+              m.exists_flag ? 1 : 0,
+            ],
+          });
+        }
+      }
+    }
+
+    if (statements.length > 0) {
+      try {
+        await client.batch(statements, 'write');
+        savedCount += chunk.length;
+        console.log(`WPP Custom: Batched saved ${chunk.length} contacts.`);
+      } catch (err) {
+        console.error('WPP Custom: Batch save failed:', err);
+        failedCount += chunk.length;
+      }
+    }
+  }
+
+  return { success: true, saved: savedCount, failed: failedCount };
+}

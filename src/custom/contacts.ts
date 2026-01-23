@@ -502,40 +502,18 @@ export async function syncAllContacts(options?: any) {
     const contacts = await getAllContacts(options);
     console.log(`WPP Custom: Fetched ${contacts.length} contacts. Saving...`);
 
-    let savedCount = 0;
-    let failedCount = 0;
-
-    // Save in batches or one by one? One by one is safer for SQLite concurrency in basic setup.
-    // Database logic handles transactions/locking internally usually.
-    // Parallelizing might lock the DB. Sequential is safer.
-
-    for (const contact of contacts) {
-      // Import saveFullContact dynamically or at top?
-      // Since it's in the same bundle, better import at top.
-      const { saveFullContact } = await import('./database');
-      const result = await saveFullContact(contact);
-      if (result) savedCount++;
-      else failedCount++;
-
-      if ((savedCount + failedCount) % 50 === 0) {
-        console.log(
-          `WPP Custom: Sync Progress: ${savedCount + failedCount}/${
-            contacts.length
-          }`
-        );
-        // Small delay to yield to UI/Main thread
-        await new Promise((r) => setTimeout(r, 10));
-      }
-    }
+    const { saveContactsBatch } = await import('./database');
+    console.log('WPP Custom: Starting batch save...');
+    const result = await saveContactsBatch(contacts);
 
     console.log(
-      `WPP Custom: Sync complete. Saved: ${savedCount}, Failed: ${failedCount}`
+      `WPP Custom: Sync complete. Saved: ${result.saved}, Failed: ${result.failed}`
     );
     return {
-      success: true,
+      success: result.success,
       total: contacts.length,
-      saved: savedCount,
-      failed: failedCount,
+      saved: result.saved,
+      failed: result.failed,
     };
   } catch (error) {
     console.error('WPP Custom: Error syncing contacts:', error);

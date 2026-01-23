@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import * as contacts from './contacts';
+import * as database from './database';
+import * as example from './example';
+
 console.log('Custom Features');
 
-export * from './contacts';
-export * from './database';
-export * from './example';
+export { contacts, database, example };
