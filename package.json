@@ -64,6 +64,7 @@
     "conventional-changelog-angular": "^8.1.0",
     "conventional-changelog-cli": "^5.0.0",
     "debug": "^4.4.3",
+    "dotenv-webpack": "^8.1.1",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
@@ -94,5 +95,8 @@
   },
   "engines": {
     "whatsapp-web": ">=2.2326.10-beta"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.0"
   }
 }

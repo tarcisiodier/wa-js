@@ -16,4 +16,5 @@
 console.log('Custom Features');
 
 export * from './contacts';
+export * from './database';
 export * from './example';

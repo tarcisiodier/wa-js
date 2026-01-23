@@ -2,6 +2,7 @@ const path = require('path');
 const webpack = require('webpack');
 const TerserPlugin = require('terser-webpack-plugin');
 const packageJSON = require('./package.json');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = (env, argv) => {
   const isDevelopment = argv.mode === 'development';
@@ -57,6 +58,9 @@ module.exports = (env, argv) => {
         banner: `/*! wppconnect-team/wa-js v${packageJSON.version} */\n`,
         entryOnly: true,
         raw: true
+      }),
+      new Dotenv({
+        systemvars: true
       })
     ],
   };
