@@ -40,6 +40,8 @@ export async function checkNumber(contactId: string) {
         ? phone.slice(0, 4) + '9' + phone.slice(4)
         : phone;
 
+    const extraInfo = await contact.getPnLidEntry(contactId);
+
     return {
       there_is: true,
       data: {
@@ -50,6 +52,7 @@ export async function checkNumber(contactId: string) {
         phoneBR,
         there_is: true,
         link: [wid, phone, lid, phoneBR].filter((item) => item !== null),
+        contact: extraInfo,
       },
     };
   } else {

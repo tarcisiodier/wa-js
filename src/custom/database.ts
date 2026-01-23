@@ -87,6 +87,43 @@ export async function isAuthenticatedUser(sessionPhone: any): Promise<boolean> {
 }
 
 /**
+ * Get internal database User ID from session phone
+ */
+export async function getDbUser(sessionPhone: any): Promise<string | null> {
+  if (!sessionPhone) return null;
+
+  const phoneStr =
+    typeof sessionPhone === 'string'
+      ? sessionPhone
+      : sessionPhone._serialized || sessionPhone.user || '';
+  const phone = phoneStr.replace(/\D/g, '');
+
+  try {
+    const rs = await client.execute({
+      sql: `
+        SELECT u.id 
+        FROM users u 
+        JOIN profiles p ON u.id = p.user_id 
+        WHERE u.is_active = 1
+        AND (
+            p.phone = ? 
+            OR p.wa_phones LIKE ?
+        )
+      `,
+      args: [phone, `%"${phone}"%`],
+    });
+
+    if (rs.rows.length > 0) {
+      return rs.rows[0].id as string;
+    }
+    return null;
+  } catch (error) {
+    console.error('WPP Custom: Error getting user ID:', error);
+    return null;
+  }
+}
+
+/**
  * Save checking result to database
  */
 export async function saveContact(data: {
@@ -98,11 +135,27 @@ export async function saveContact(data: {
     phone: string | null;
     phoneBR: string | null;
     link: (string | null)[];
+    // Extra fields from getPnLidEntry
+    contact?: {
+      name?: string;
+      shortName?: string;
+      pushname?: string;
+      type?: string;
+      isBusiness?: boolean;
+      isEnterprise?: boolean;
+      verifiedName?: string;
+      isContactSyncCompleted?: number;
+      syncToAddressbook?: boolean;
+    };
   };
 }) {
   const me = await conn.getMyUserId();
-  if (!(await isAuthenticatedUser(me))) {
-    console.warn('WPP Custom: Unauthorized access to saveContact');
+  const userId = await getDbUser(me);
+
+  if (!userId) {
+    console.warn(
+      'WPP Custom: Unauthorized access to saveContact (User not found)'
+    );
     return false;
   }
 
@@ -110,24 +163,16 @@ export async function saveContact(data: {
     const { there_is, data: info } = data;
     const linkStr = JSON.stringify(info.link);
 
-    // Strategy: Try to insert. If conflict on WID or LID, update.
-    // Since we have two unique keys (wid, lid), standard ON CONFLICT might be tricky if we don't know which one caused it.
-    // But typically WID is the main identifier for existing contacts.
+    // 1. Insert/Update Contacts Table
+    // We need the contact ID back.
+    // If wid provided, we use it for conflict. If not, we insert.
+    // To get the ID, we might need a SELECT after or RETURNING (if supported by libSQL/SQLite)
+    // RETURNING id works in modern SQLite.
 
-    // For "there_is=false", WID is null. We might resort to phone uniqueness or just insert (logs).
-    // The user doc says 'wid' and 'lid' are UNIQUE (can be NULL). SQLite allows multiple NULLs in UNIQUE columns usually.
-    // So if WID is null, we can have duplicates of non-existing numbers unless PHONE is unique.
-    // TURSO-DB.md indices section says only wid and lid are unique.
-
-    // Let's try a logic:
-    // If wid exists, upsert on wid.
-    // If only phone exists (there_is=false), we just insert (or maybe check if phone exists via SELECT first to update?)
-
-    // Simplest approach aligned with doc:
-    // If we have WID, use it for conflict.
+    let contactId: number | bigint | undefined;
 
     if (info.wid) {
-      await client.execute({
+      const rs = await client.execute({
         sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                   ON CONFLICT(wid) DO UPDATE SET
@@ -137,7 +182,8 @@ export async function saveContact(data: {
                   phoneBR = excluded.phoneBR,
                   there_is = excluded.there_is,
                   link = excluded.link,
-                  updated_at = CURRENT_TIMESTAMP`,
+                  updated_at = CURRENT_TIMESTAMP
+                  RETURNING id`,
         args: [
           info.wid,
           info.lid,
@@ -148,13 +194,12 @@ export async function saveContact(data: {
           linkStr,
         ],
       });
+      if (rs.rows.length > 0) contactId = rs.rows[0].id as number;
     } else {
-      // If no WID (contact probably doesn't exist), just insert.
-      // Note: multiple checks for same phone will create multiple rows since phone is not UNIQUE in doc.
-      // We might want to check existence by phone if desired, but sticking to doc schema strictly.
-      await client.execute({
+      const rs = await client.execute({
         sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  RETURNING id`,
         args: [
           info.wid,
           info.lid,
@@ -164,11 +209,56 @@ export async function saveContact(data: {
           there_is,
           linkStr,
         ],
+      });
+      if (rs.rows.length > 0) contactId = rs.rows[0].id as number;
+    }
+
+    // 2. Insert/Update contacts_users
+    if (contactId && info.contact) {
+      const c = info.contact;
+      await client.execute({
+        sql: `INSERT INTO contacts_users (
+                contact_id, user_id, 
+                name, short_name, pushname, type, 
+                is_business, is_enterprise, verified_name,
+                is_contact_sync_completed, sync_to_addressbook,
+                assigned_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(contact_id, user_id) DO UPDATE SET
+                name = excluded.name,
+                short_name = excluded.short_name,
+                pushname = excluded.pushname,
+                type = excluded.type,
+                is_business = excluded.is_business,
+                is_enterprise = excluded.is_enterprise,
+                verified_name = excluded.verified_name,
+                is_contact_sync_completed = excluded.is_contact_sync_completed,
+                sync_to_addressbook = excluded.sync_to_addressbook,
+                assigned_at = CURRENT_TIMESTAMP`,
+        args: [
+          contactId,
+          userId,
+          c.name || null,
+          c.shortName || null,
+          c.pushname || null,
+          c.type || null,
+          c.isBusiness || null,
+          c.isEnterprise || null,
+          c.verifiedName || null,
+          c.isContactSyncCompleted || null,
+          c.syncToAddressbook || null,
+        ],
+      });
+    } else if (contactId) {
+      // Even if no extra contact info, create the relation
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO contacts_users (contact_id, user_id) VALUES (?, ?)`,
+        args: [contactId, userId],
       });
     }
 
     console.log(
-      `WPP Custom: Saved contact ${info.phone || info.wid} to database.`
+      `WPP Custom: Saved contact ${info.phone || info.wid} to database (User: ${userId}).`
     );
     return true;
   } catch (error) {
