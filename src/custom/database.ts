@@ -228,12 +228,12 @@ export async function saveContact(data: {
                           name = ?, phone = ?, phoneBR = ?, there_is = ?, link = ?, updated_at = CURRENT_TIMESTAMP
                           WHERE id = ?`,
               args: [
-                info.name,
-                info.phone,
-                info.phoneBR,
+                info.name || null,
+                info.phone || null,
+                info.phoneBR || null,
                 there_is,
                 linkStr,
-                contactId,
+                contactId! as number | bigint, // We know it exists from the check above, but safely casting or using non-null assertion
               ],
             });
           }
