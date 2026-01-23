@@ -174,10 +174,10 @@ export async function saveContact(data: {
     if (info.wid) {
       // Upsert
       await client.execute({
-        sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        // Removed lid from contacts table
+        sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                   ON CONFLICT(wid) DO UPDATE SET
-                  lid = excluded.lid,
                   name = excluded.name,
                   phone = excluded.phone,
                   phoneBR = excluded.phoneBR,
@@ -186,7 +186,7 @@ export async function saveContact(data: {
                   updated_at = CURRENT_TIMESTAMP`,
         args: [
           info.wid,
-          info.lid,
+          // info.lid removed
           info.name,
           info.phone,
           info.phoneBR,
@@ -201,24 +201,20 @@ export async function saveContact(data: {
         args: [info.wid],
       });
       if (rsId.rows.length > 0) {
-        // Handle object or array row
         const row = rsId.rows[0];
         // @ts-expect-error row is object or array
         contactId = row.id || row[0];
       }
     } else {
       // Insert
-      // For phone-only contacts, checking if it exists first might be needed to avoid unique constraint errors if phone unique? No, phone is not unique in TURSO-DB.md indices (only wid/lid).
-      // But we want to avoid duplicates if possible?
-      // Doc says "phone: Telefone ... Indices: phone". Not unique.
-      // So we just insert.
 
       const _rs = await client.execute({
-        sql: `INSERT INTO contacts (wid, lid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        // Removed lid from contacts table
+        sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         args: [
           info.wid,
-          info.lid,
+          // info.lid removed
           info.name,
           info.phone,
           info.phoneBR,
@@ -226,8 +222,6 @@ export async function saveContact(data: {
           linkStr,
         ],
       });
-      // In this case, we need the last inserted ID.
-      // SQLite 'last_insert_rowid()' usually works.
       const rsId = await client.execute('SELECT last_insert_rowid() as id');
       if (rsId.rows.length > 0) {
         const row = rsId.rows[0];
@@ -243,6 +237,7 @@ export async function saveContact(data: {
       const args = [
         contactId,
         userId,
+        info.lid || null, // Added lid here
         c.name || null,
         c.shortName || null,
         c.pushname || null,
@@ -262,13 +257,14 @@ export async function saveContact(data: {
 
       await client.execute({
         sql: `INSERT INTO contacts_users (
-                contact_id, user_id, 
+                contact_id, user_id, lid,
                 name, short_name, pushname, type, 
                 is_business, is_enterprise, verified_name,
                 is_contact_sync_completed, sync_to_addressbook,
                 assigned_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
               ON CONFLICT(contact_id, user_id) DO UPDATE SET
+                lid = excluded.lid,
                 name = excluded.name,
                 short_name = excluded.short_name,
                 pushname = excluded.pushname,
@@ -283,9 +279,13 @@ export async function saveContact(data: {
       });
     } else if (contactId) {
       // Even if no extra contact info, create the relation
+
       await client.execute({
-        sql: `INSERT OR IGNORE INTO contacts_users (contact_id, user_id) VALUES (?, ?)`,
-        args: [contactId, userId],
+        sql: `INSERT INTO contacts_users (contact_id, user_id, lid) 
+              VALUES (?, ?, ?)
+              ON CONFLICT(contact_id, user_id) DO UPDATE SET
+              lid = excluded.lid`,
+        args: [contactId, userId, info.lid || null],
       });
     }
 
