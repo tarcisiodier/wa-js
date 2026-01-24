@@ -175,14 +175,15 @@ export async function saveContact(data: {
       // Upsert
       await client.execute({
         // Removed lid from contacts table
-        sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, tested, updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                   ON CONFLICT(wid) DO UPDATE SET
                   name = excluded.name,
                   phone = excluded.phone,
                   phoneBR = excluded.phoneBR,
                   there_is = excluded.there_is,
                   link = excluded.link,
+                  tested = excluded.tested,
                   updated_at = CURRENT_TIMESTAMP`,
         args: [
           info.wid,
@@ -192,6 +193,7 @@ export async function saveContact(data: {
           info.phoneBR,
           there_is,
           linkStr,
+          true, // tested
         ],
       });
 
@@ -225,7 +227,7 @@ export async function saveContact(data: {
             // Update the existing contact record (even if it has NULL wid) to keep name/phone fresh
             await client.execute({
               sql: `UPDATE contacts SET 
-                          name = ?, phone = ?, phoneBR = ?, there_is = ?, link = ?, updated_at = CURRENT_TIMESTAMP
+                          name = ?, phone = ?, phoneBR = ?, there_is = ?, link = ?, tested = ?, updated_at = CURRENT_TIMESTAMP
                           WHERE id = ?`,
               args: [
                 info.name || null,
@@ -233,6 +235,7 @@ export async function saveContact(data: {
                 info.phoneBR || null,
                 there_is,
                 linkStr,
+                true, // tested
                 contactId! as number | bigint, // We know it exists from the check above, but safely casting or using non-null assertion
               ],
             });
@@ -246,8 +249,8 @@ export async function saveContact(data: {
       if (!contactId) {
         const _rs = await client.execute({
           // Removed lid from contacts table
-          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
-                      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, tested, updated_at)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           args: [
             info.wid,
             // info.lid removed
@@ -256,6 +259,7 @@ export async function saveContact(data: {
             info.phoneBR,
             there_is,
             linkStr,
+            true, // tested
           ],
         });
         const rsId = await client.execute('SELECT last_insert_rowid() as id');
@@ -559,16 +563,25 @@ export async function saveContactsBatch(contacts: any[]) {
 
       if (wid) {
         statements.push({
-          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          sql: `INSERT INTO contacts (wid, name, phone, phoneBR, there_is, link, tested, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(wid) DO UPDATE SET
                     name = excluded.name,
                     phone = excluded.phone,
                     phoneBR = excluded.phoneBR,
                     there_is = excluded.there_is,
                     link = excluded.link,
+                    tested = excluded.tested,
                     updated_at = CURRENT_TIMESTAMP`,
-          args: [wid, info.name, info.phone, info.phoneBR, there_is, linkStr],
+          args: [
+            wid,
+            info.name,
+            info.phone,
+            info.phoneBR,
+            there_is,
+            linkStr,
+            true,
+          ],
         });
 
         // 2. Upsert Contacts_Users using Subquery for contact_id
