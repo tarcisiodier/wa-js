@@ -538,8 +538,8 @@ export async function saveContactsBatch(contacts: any[]) {
   }
 
   // Batch size limit (LibSQL/Turso might have limits on statements or size)
-  // Safe bet: 20 contacts per batch (~60 statements)
-  const BATCH_SIZE = 20;
+  // Safe bet: 50 contacts per batch (~150 statements)
+  const BATCH_SIZE = 50;
   let savedCount = 0;
   let failedCount = 0;
 
