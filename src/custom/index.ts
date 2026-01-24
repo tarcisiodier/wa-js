@@ -16,7 +16,8 @@
 import * as contacts from './contacts';
 import * as database from './database';
 import * as example from './example';
+import * as tenant from './tenant';
 
 console.log('Custom Features');
 
-export { contacts, database, example };
+export { contacts, database, example, tenant };
