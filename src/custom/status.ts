@@ -1,5 +1,5 @@
 /*!
- * Copyright 2022 WPPConnect Team
+ * Copyright 2024 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import * as contacts from './contacts';
-import * as database from './database';
-import * as example from './example';
-import * as status from './status';
-import * as tenant from './tenant';
 
-console.log('Custom Features');
+import * as conn from '../conn';
 
-export { contacts, database, example, status, tenant };
+/**
+ * Return the current status of the connection
+ */
+export async function getWhatsAppStatus() {
+  return {
+    ready: await conn.isMainReady(),
+    authenticated: await conn.isAuthenticated(),
+    online: await conn.isOnline(),
+    loaded: await conn.isMainLoaded(),
+    registered: await conn.isRegistered(),
+    phone: await conn.getMyUserId(),
+  };
+}
