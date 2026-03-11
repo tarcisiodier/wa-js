@@ -66,6 +66,10 @@ WHERE json_extract(wa_phones, '$[0]') = '555194274915'
    OR json_extract(wa_phones, '$[1]') = '555194274915';
 ```
 
+`WPP.conn.getStreamData` - Get current stream mode and info (connection state)
+
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
 ### Tabela: `contacts`
 
 Armazena informações de contatos do WhatsApp.
@@ -203,6 +207,61 @@ Armazena a última mensagem trocada entre um contato e um usuário.
 - `v_user_unread_messages`: Contagem de mensagens não lidas por usuário
 
 ## 🚀 Uso
+
+`Object.keys(WPP.group).sort()`
+
+### Events
+
+#### Connection Events
+
+`WPP.on('conn.stream_mode_changed', callback)` - Triggered when the connection mode changes
+
+Stream modes:
+- `QR` - QR code is displayed, waiting for scan
+- `MAIN` - Main interface is loaded and ready
+- `SYNCING` - Syncing messages and data
+- `OFFLINE` - Connection is offline
+- `CONFLICT` - Login conflict detected
+- `PROXYBLOCK` - Blocked by proxy
+- `TOS_BLOCK` - Blocked for Terms of Service violation
+- `SMB_TOS_BLOCK` - SMB blocked for Terms of Service violation
+- `DEPRECATED_VERSION` - WhatsApp version is deprecated
+
+```javascript
+WPP.on('conn.stream_mode_changed', (mode) => {
+  console.log('Connection mode:', mode);
+  if (mode === 'MAIN') {
+    console.log('WhatsApp is ready!');
+  }
+});
+```
+
+`WPP.on('conn.stream_info_changed', callback)` - Triggered when the internal connection state changes
+
+Stream info states:
+- `OFFLINE` - Connection is offline
+- `OPENING` - Opening connection
+- `PAIRING` - Pairing with phone
+- `SYNCING` - Syncing messages
+- `RESUMING` - Resuming connection
+- `CONNECTING` - Connecting to server
+- `NORMAL` - Normal operation
+
+```javascript
+WPP.on('conn.stream_info_changed', (info) => {
+  console.log('Connection state:', info);
+});
+```
+
+#### Chat Events
+
+`WPP.chat.on('chat.new_message')` - Event to dispatch on receive a new message
+
+To see all events, check: [https://wppconnect.io/wa-js/types/ev.EventTypes.html](https://wppconnect.io/wa-js/types/ev.EventTypes.html)
+
+## Development
+
+Steps to run locally:
 
 ### Conectar ao banco
 
